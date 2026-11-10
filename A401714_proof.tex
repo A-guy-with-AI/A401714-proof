@@ -1,0 +1,372 @@
+\documentclass[11pt,a4paper]{amsart}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage[margin=2.7cm]{geometry}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\usepackage{listings}
+
+\lstdefinelanguage{lean}{
+  morekeywords={def,lemma,theorem,noncomputable,namespace,end,open,import,by,fun,if,then,else},
+  sensitive=true, morecomment=[l]{--}, morecomment=[s]{/-}{-/}, morestring=[b]"}
+\lstset{language=lean, basicstyle=\ttfamily\footnotesize, keywordstyle=\bfseries,
+  commentstyle=\itshape\color{black!60}, columns=fullflexible, keepspaces=true,
+  frame=single, framerule=0.3pt, rulecolor=\color{black!30}, xleftmargin=4pt, xrightmargin=4pt,
+  literate={ℕ}{{$\mathbb{N}$}}1 {ℚ}{{$\mathbb{Q}$}}1 {∑}{{$\sum$}}1 {∏}{{$\prod$}}1
+           {∈}{{$\in$}}1 {≤}{{$\le$}}1 {¬}{{$\neg$}}1 {∀}{{$\forall$}}1 {→}{{$\to$}}1
+           {∣}{{$\mid$}}1 {·}{{$\cdot$}}1 {↔}{{$\leftrightarrow$}}1 {≥}{{$\ge$}}1}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\usig}{\sigma^{*}}
+\newcommand{\ssq}{\sigma_{\square}}
+\newcommand{\rad}{\operatorname{rad}}
+\newcommand{\oeis}[1]{\href{https://oeis.org/#1}{#1}}
+
+\title[A proof of the conjecture A401714(n) $\le$ A401715(n)]{A proof of Karttunen's conjecture\\ A401714$(n) \le$ A401715$(n)$, \\ with a complete formal verification in Lean~4}
+\author{A-guy-with-AI}
+\date{November 10, 2026}
+
+\begin{document}
+
+\begin{abstract}
+For a positive integer $n$, let $\usig(n)$ denote the sum of the unitary divisors of $n$, let $\ssq(n)$ denote the sum of its squarefree divisors, let $\rad(n)$ be the product of the distinct primes dividing $n$, and let $q(n)$ be the smallest prime not dividing $n$. We prove that
+\[
+  \frac{n}{\rad(n)} < q(n) \quad\Longrightarrow\quad \usig(n) + \ssq(n) \ge 2n .
+\]
+This settles a conjecture recorded by A.~Karttunen in the OEIS on November~6, 2026, namely $\mathrm{A401714}(n) \le \mathrm{A401715}(n)$ for all $n \ge 1$, equivalently that \oeis{A388986} is a subsequence of \oeis{A393869}. The bound is sharp, and under the hypothesis equality holds exactly for $n \in \{1,4,24\}$. The proof is elementary. For $q(n) \le 73$ it reduces to $691$ explicit finite verifications. For $q(n) > 73$ it rests on the inequality $\prod_{p<x}(1+1/p) \ge \tfrac12 H_{x-1}$ and on a rearrangement argument. The main inequality has been formalized and machine-checked in Lean~4 with Mathlib; the classification of the equality cases is established separately, by the written argument and an exact finite computation.
+\end{abstract}
+
+\maketitle
+
+\section{Introduction}
+
+Throughout, $p$ always denotes a prime, $n$ a positive integer, and $v_p(n)$ the exponent of $p$ in $n$. We use the following arithmetic functions:
+\begin{itemize}[leftmargin=2em]
+  \item $\usig(n) = \sum_{d \mid n,\ \gcd(d,n/d)=1} d$, the sum of the unitary divisors of $n$ (\oeis{A034448});
+  \item $\ssq(n) = \sum_{d \mid n,\ d \text{ squarefree}} d$, the sum of the squarefree divisors of $n$ (\oeis{A048250});
+  \item $\rad(n) = \prod_{p \mid n} p$, and $A(n) = n/\rad(n)$ (\oeis{A003557});
+  \item $q(n)$, the smallest prime not dividing $n$ (\oeis{A053669}).
+\end{itemize}
+
+In the On-Line Encyclopedia of Integer Sequences, \oeis{A401714} is the characteristic function of the condition $A(n) < q(n)$, and \oeis{A401715} is the characteristic function of the condition $\usig(n)+\ssq(n) \ge 2n$. Karttunen conjectured that $\mathrm{A401714}(n) \le \mathrm{A401715}(n)$ for all $n \ge 1$~\cite{A401714,A401715}. Since both sequences take only the values $0$ and $1$, this is equivalent to the following statement, which we prove.
+
+\begin{theorem}\label{thm:main}
+For every integer $n \ge 1$,
+\[
+  A(n) < q(n) \quad\Longrightarrow\quad \usig(n) + \ssq(n) \ge 2n .
+\]
+\end{theorem}
+
+Equivalently, the set \oeis{A393981} of $k$ with $A(k)<q(k)$ is contained in the set \oeis{A389215} of $k$ with $\usig(k)+\ssq(k)\ge 2k$. Since $A(n)$ divides $n$ while $q(n)$ does not, $A(n)\ne q(n)$ for every $n$, so the complement of the condition $A(n)<q(n)$ is $A(n)>q(n)$. Passing to complements, \oeis{A388986} is a subsequence of \oeis{A393869}; this is the form in which the conjecture is stated on \oeis{A388986}~\cite{A388986}.
+
+The inequality cannot be improved. For $n=4$ we have $A(4)=2<3=q(4)$ and $\usig(4)+\ssq(4) = 5+3 = 8 = 2\cdot 4$. Corollary~\ref{cor:equality} shows that, under the hypothesis of Theorem~\ref{thm:main}, equality holds exactly for $n \in \{1, 4, 24\}$. The hypothesis cannot simply be dropped: $n=240$ satisfies $\usig(240)+\ssq(240) = 408+72 = 480 = 2\cdot 240$ but has $A(240)=8>7=q(240)$, and there are $n$ (for instance $n=8$) with $\usig(n)+\ssq(n) < 2n$.
+
+\medskip
+\noindent\textbf{Structure of the proof.} After the preliminaries of Section~\ref{sec:prelim}, Section~\ref{sec:reduction} reduces the problem to numbers of the form $n_0 = a\cdot\prod_{p<q}p$ with $1 \le a < q$. Section~\ref{sec:small} treats $q \le 73$ by direct verification. Section~\ref{sec:large} treats $q>73$: there the single term $\usig(n)$ is already at least $2n$, and this follows from an elementary lower bound for $\prod_{p<x}(1+1/p)$. Section~\ref{sec:lean} describes the formal verification.
+
+\section{Preliminaries}\label{sec:prelim}
+
+For $n \ge 1$ write $n = \prod_{p \in S} p^{e_p}$, where $S = S(n)$ is the set of primes dividing $n$ and $e_p = v_p(n) \ge 1$. Then
+\[
+  \rad(n) = \prod_{p\in S} p, \qquad A(n) = \prod_{p \in S} p^{e_p-1}.
+\]
+
+\begin{lemma}\label{lem:products}
+For every $n \ge 1$,
+\[
+  \usig(n) = \prod_{p \in S}\bigl(1+p^{e_p}\bigr), \qquad \ssq(n) = \prod_{p\in S}(1+p).
+\]
+\end{lemma}
+
+\begin{proof}
+Let $d \mid n$. If $\gcd(d,n/d)=1$, then for each $p \in S$ the prime $p$ cannot divide both $d$ and $n/d$, so $v_p(d) \in \{0,e_p\}$. Hence the unitary divisors of $n$ are exactly the numbers $d_U = \prod_{p\in U}p^{e_p}$ with $U \subseteq S$. Conversely, each $d_U$ is a unitary divisor, since $n/d_U = d_{S\setminus U}$ and $d_U$, $d_{S\setminus U}$ have no prime factor in common. Distinct $U$ give distinct $d_U$, because the set of prime factors of $d_U$ is $U$. Therefore $\usig(n) = \sum_{U \subseteq S} \prod_{p\in U}p^{e_p} = \prod_{p\in S}(1+p^{e_p})$. In the same way, the squarefree divisors of $n$ are exactly the numbers $\prod_{p \in U} p$ with $U\subseteq S$, all distinct, which gives the formula for $\ssq(n)$.
+\end{proof}
+
+\begin{remark}
+The formal proof of the main inequality uses only the lower bounds $\usig(n) \ge \prod_{p\in S}(1+p^{e_p})$ and $\ssq(n) \ge \prod_{p \in S}(1+p)$, which follow from the injectivity of $U \mapsto d_U$ alone. Wherever the identities of Lemma~\ref{lem:products} are used below in the proof of Theorem~\ref{thm:main} (in \eqref{eq:F} and in Lemmas~\ref{lem:reduction} and~\ref{lem:usig-lower}), only the corresponding lower bounds are needed. The identities themselves are needed for the classification of the equality cases (Corollary~\ref{cor:equality}), which is not part of the formalization.
+\end{remark}
+
+Dividing by $n$, Lemma~\ref{lem:products} gives
+\begin{equation}\label{eq:F}
+  F(n) := \frac{\usig(n)+\ssq(n)}{n} = \prod_{p\in S}\Bigl(1+\frac{1}{p^{e_p}}\Bigr) + \frac{1}{A(n)}\prod_{p\in S}\Bigl(1+\frac1p\Bigr),
+\end{equation}
+and Theorem~\ref{thm:main} asserts that $F(n) \ge 2$ whenever $A(n)<q(n)$.
+
+\begin{lemma}\label{lem:structure}
+Let $n \ge 1$ with $A(n) < q(n)$. Put $q = q(n)$ and $T = \{p \in S : e_p \ge 2\}$. Then:
+\begin{enumerate}[label=\textup{(\roman*)},leftmargin=2.2em]
+  \item every prime $p < q$ divides $n$, and $q \nmid n$;
+  \item $\prod_{p \in T} p \le A(n) < q$; in particular every $p\in T$ satisfies $p<q$;
+  \item every prime $p > q$ dividing $n$ satisfies $e_p = 1$.
+\end{enumerate}
+\end{lemma}
+
+\begin{proof}
+(i) holds by the definition of $q$. For (ii), every factor of $A(n) = \prod_{p\in S}p^{e_p-1}$ is at least $1$, and for $p\in T$ we have $p^{e_p-1} \ge p$. Hence $A(n) \ge \prod_{p\in T}p^{e_p-1} \ge \prod_{p\in T}p$. (iii) follows from (ii).
+\end{proof}
+
+We write $P(q) = \prod_{p<q} p$, and $\mathcal{P}(x)$ for the set of primes $p<x$.
+
+\section{Reduction to finitely many shapes for each \texorpdfstring{$q$}{q}}\label{sec:reduction}
+
+\begin{lemma}\label{lem:reduction}
+Let $n \ge 1$ with $A(n)<q(n)$, and put $q=q(n)$ and $a = A(n)$. Then $1 \le a < q$, $v_p(n) = 1 + v_p(a)$ for every prime $p<q$, and
+\begin{equation}\label{eq:G}
+  2\,a\,P(q) \;\le\; G(q,a) := \prod_{p<q}\bigl(1+p^{1+v_p(a)}\bigr) + \prod_{p<q}(1+p)
+\end{equation}
+implies $\usig(n)+\ssq(n) \ge 2n$.
+\end{lemma}
+
+\begin{proof}
+By Lemma~\ref{lem:structure}, $S = \mathcal{P}(q) \sqcup S_1$, where $S_1$ is the set of prime divisors of $n$ greater than $q$, and $e_p = 1$ for $p\in S_1$. Hence $a = A(n) = \prod_{p<q}p^{e_p-1}$, and unique factorization gives $v_p(a) = e_p-1$ for $p<q$. Write $n = n_0\, s$ with $n_0 = \prod_{p<q}p^{e_p} = a\,P(q)$ and $s = \prod_{p\in S_1}p$. Using $e_p=1$ on $S_1$, Lemma~\ref{lem:products} gives
+\[
+  \usig(n) + \ssq(n) = \Bigl(\prod_{p<q}(1+p^{e_p}) + \prod_{p<q}(1+p)\Bigr)\prod_{p\in S_1}(1+p) = G(q,a)\prod_{p \in S_1}(1+p).
+\]
+Since $\prod_{p\in S_1}(1+p) \ge s$, inequality \eqref{eq:G} gives $\usig(n)+\ssq(n) \ge 2aP(q)s = 2n$.
+\end{proof}
+
+\begin{remark}
+Conversely, for every prime $q$ and every $1\le a<q$, the number $n_0 = aP(q)$ satisfies $A(n_0)=a$ and $q(n_0)=q$, since all prime factors of $a$ are smaller than $q$. Hence \eqref{eq:G} for all such pairs $(q,a)$ is \emph{equivalent} to Theorem~\ref{thm:main}.
+\end{remark}
+
+\section{The case \texorpdfstring{$q(n) \le 73$}{q(n) <= 73}}\label{sec:small}
+
+\begin{proposition}\label{prop:small}
+Inequality \eqref{eq:G} holds for every prime $q \le 73$ and every integer $1\le a<q$. Equality holds exactly for $(q,a) \in \{(2,1),(3,2),(5,4)\}$.
+\end{proposition}
+
+\begin{proof}
+This is a finite verification over $\sum_{q\le 73}(q-1) = 691$ pairs $(q,a)$, where the sum runs over the $21$ primes $q \le 73$. Each case is an inequality between explicit integers. In the formal proof (Section~\ref{sec:lean}), all $691$ cases are checked by the Lean kernel itself (tactic \texttt{decide}), with $v_p(a)$ computed by a recursive function proved equal to the $p$-adic valuation. The equality cases were determined by an independent exact computation in rational arithmetic (script \texttt{checks/equality\_cases.py}, which also reproduces Tables~\ref{tab:small} and~\ref{tab:thresholds}). Table~\ref{tab:small} lists, for each $q$, the minimum of $G(q,a)/(aP(q))$ over $1\le a<q$.
+\end{proof}
+
+\begin{table}[ht]
+\centering\small
+\begin{tabular}{rrr@{\qquad}rrr@{\qquad}rrr}
+\toprule
+$q$ & $\min$ & at $a$ & $q$ & $\min$ & at $a$ & $q$ & $\min$ & at $a$\\
+\midrule
+2 & 2.0000 & 1 & 19 & 2.4010 & 18 & 47 & 2.6328 & 36\\
+3 & 2.0000 & 2 & 23 & 2.5141 & 20 & 53 & 2.6125 & 48\\
+5 & 2.0000 & 4 & 29 & 2.3683 & 24 & 59 & 2.6618 & 48\\
+7 & 2.0667 & 6 & 31 & 2.4500 & 24 & 61 & 2.5454 & 60\\
+11 & 2.2552 & 10 & 37 & 2.4456 & 36 & 67 & 2.5871 & 60\\
+13 & 2.1195 & 12 & 41 & 2.5117 & 36 & 71 & 2.6257 & 60\\
+17 & 2.2825 & 12 & 43 & 2.5730 & 36 & 73 & 2.6627 & 60\\
+\bottomrule
+\end{tabular}
+\caption{$\min_{1\le a<q} G(q,a)/(a P(q))$ for the primes $q\le 73$, rounded to four decimals.}\label{tab:small}
+\end{table}
+
+\section{The case \texorpdfstring{$q(n) > 73$}{q(n) > 73}}\label{sec:large}
+
+In this case we show that $\usig(n) \ge 2n$ on its own. Let $p_1 = 2 < p_2 = 3 < \cdots$ be the primes in increasing order. For $t\ge 0$ put
+\[
+  R_t = \{p_1,\dots,p_t\},\qquad P_t = \prod_{i=1}^t p_i, \qquad D_t = \prod_{i=1}^t\Bigl(1+\frac{1}{p_i}\Bigr),
+\]
+and for an integer $x \ge 1$ put
+\[
+  N(x) = \prod_{p<x}\Bigl(1+\frac1p\Bigr), \qquad H_m = \sum_{k=1}^m \frac1k \quad (H_0 = 0).
+\]
+
+\begin{lemma}\label{lem:usig-lower}
+Let $n\ge1$ with $A(n)<q(n)=q$, and let $T$ be as in Lemma~\ref{lem:structure}. Then
+\[
+  \frac{\usig(n)}{n} \ \ge\ \prod_{\substack{p<q\\ p\notin T}}\Bigl(1+\frac1p\Bigr).
+\]
+\end{lemma}
+
+\begin{proof}
+By Lemma~\ref{lem:products}, $\usig(n)/n = \prod_{p\in S}(1+p^{-e_p})$. Every factor is at least $1$, so the product is at least $\prod_{p\in S\setminus T}(1+p^{-e_p}) = \prod_{p\in S\setminus T}(1+1/p)$. By Lemma~\ref{lem:structure}(i), $\mathcal{P}(q)\setminus T \subseteq S\setminus T$, and the claim follows, again because all factors are at least $1$.
+\end{proof}
+
+\begin{lemma}[Rearrangement]\label{lem:rearr}
+Let $T$ be a finite set of primes and $t = |T|$. Then
+\[
+  \text{(a)}\quad \prod_{p\in T}\Bigl(1+\frac1p\Bigr) \le D_t, \qquad\qquad \text{(b)}\quad P_t \le \prod_{p\in T}p .
+\]
+\end{lemma}
+
+\begin{proof}
+Since $|T| = |R_t| = t$, we have $|T\setminus R_t| = |R_t\setminus T| =: c$. Every element of $R_t\setminus T$ is at most $p_t$. Every element of $T\setminus R_t$ is a prime outside $\{p_1,\dots,p_t\}$, hence greater than $p_t$. Therefore
+\[
+  \prod_{p\in T\setminus R_t}\Bigl(1+\frac1p\Bigr) \le \Bigl(1+\frac1{p_t}\Bigr)^{c} \le \prod_{p\in R_t\setminus T}\Bigl(1+\frac1p\Bigr),
+  \qquad
+  \prod_{p\in R_t\setminus T}p \le p_t^{\,c} \le \prod_{p\in T\setminus R_t}p .
+\]
+Multiplying both inequalities by the common factor over $T\cap R_t$ gives (a) and (b). (For $t=0$ both sides equal $1$.)
+\end{proof}
+
+\begin{lemma}\label{lem:harmonic}
+For every integer $x\ge 1$, $N(x) \ge \tfrac12 H_{x-1}$.
+\end{lemma}
+
+\begin{proof}
+Let $y = x-1$, and let $Q(y)$ be the set of squarefree integers $d$ with $1\le d\le y$. Expanding the product,
+\[
+  N(x) = \sum_{U\subseteq \mathcal{P}(x)} \ \prod_{p\in U}\frac1p .
+\]
+The map sending $d\in Q(y)$ to its set of prime factors is injective, since a squarefree $d$ is the product of its prime factors. Its values are subsets of $\mathcal{P}(x)$, since each prime factor of $d$ is at most $d \le y < x$. Moreover $\prod_{p\mid d}1/p = 1/d$. All terms of the sum being nonnegative, we get $N(x) \ge \sum_{d\in Q(y)} 1/d$.
+
+Every integer $1\le m\le y$ can be written as $m = d\,j^2$ with $d$ squarefree and $j\ge1$. Choosing one such pair $(d_m,j_m)$ for each $m$ defines an injective map $m\mapsto(d_m,j_m)$, since $m = d_m j_m^2$ is recovered from it, with values in $Q(y)\times\{1,\dots,y\}$. Hence, again by nonnegativity,
+\[
+  H_y = \sum_{m=1}^y \frac1m = \sum_{m=1}^{y}\frac{1}{d_m\,j_m^2}
+  \le \Bigl(\sum_{d\in Q(y)}\frac1d\Bigr)\Bigl(\sum_{j=1}^y\frac1{j^2}\Bigr)
+  \le 2\sum_{d\in Q(y)}\frac1d,
+\]
+because $\sum_{j=1}^y j^{-2} \le 1+\sum_{j= 2}^{y}\frac{1}{j(j-1)} = 2 - \frac1y < 2$ (for $y\ge1$; for $y=0$ both sides vanish). Combining the two estimates gives $N(x) \ge \frac12 H_{x-1}$.
+\end{proof}
+
+\begin{lemma}\label{lem:doubling}
+For every integer $N\ge 1$, $H_{2N} \ge H_N + \tfrac12$. Consequently $H_{2^m}\ge 1+\tfrac m2$ for all $m\ge0$, and $H_{16N}\ge H_N+2$ for all $N\ge1$. Moreover, $m\le m'$ implies $H_m\le H_{m'}$.
+\end{lemma}
+
+\begin{proof}
+$H_{2N}-H_N = \sum_{k=N+1}^{2N}\frac1k \ge N\cdot\frac{1}{2N} = \frac12$. The other claims follow by iterating this (from $H_1 = 1$), and monotonicity is clear.
+\end{proof}
+
+\begin{lemma}\label{lem:Dt}
+For every $t\ge0$, $D_t \le (t+2)/2$.
+\end{lemma}
+
+\begin{proof}
+By induction on $t$. The case $t=0$ is $D_0 = 1$. Since the $i$-th prime satisfies $p_i \ge i+1$, we have $p_{t+1}\ge t+2$, and therefore
+$D_{t+1} = D_t\,(1+1/p_{t+1}) \le \frac{t+2}{2}\cdot\frac{t+3}{t+2} = \frac{t+3}{2}$.
+\end{proof}
+
+\begin{lemma}\label{lem:star}
+For every $t\ge 10$, $H_{P_t} \ge 4D_t$.
+\end{lemma}
+
+\begin{proof}
+By induction on $t\ge10$. For $t=10$: $P_{10} = 6\,469\,693\,230 \ge 2^{32}$, so by Lemma~\ref{lem:doubling} $H_{P_{10}} \ge H_{2^{32}} \ge 17$, while
+\[
+  D_{10} = \prod_{p\le 29}\Bigl(1+\frac1p\Bigr) = \frac{119\,439\,360}{30\,808\,063} < 3.877,
+  \qquad 4D_{10} < 15.51 < 17 .
+\]
+For the induction step let $t\ge10$ and $p = p_{t+1}$. Then $p \ge p_{11} = 31 \ge 16$, so $P_{t+1} = p\,P_t \ge 16P_t$, and Lemma~\ref{lem:doubling} gives $H_{P_{t+1}} \ge H_{16P_t} \ge H_{P_t}+2$. On the other hand, by Lemma~\ref{lem:Dt} and $p\ge t+2$, we have $D_t \le (t+2)/2 \le p/2$, hence
+\[
+  4D_{t+1} = 4D_t + \frac{4D_t}{p} \le 4D_t + 2 \le H_{P_t}+2 \le H_{P_{t+1}} . \qedhere
+\]
+\end{proof}
+
+\begin{proposition}\label{prop:Nq}
+Let $q>73$ and $t\ge0$ be integers with $P_t<q$. Then $N(q)\ge 2D_t$.
+\end{proposition}
+
+\begin{proof}
+\emph{Case $t\ge10$.} By Lemmas~\ref{lem:harmonic}, \ref{lem:doubling} and~\ref{lem:star}, since $q-1\ge P_t$,
+$N(q) \ge \tfrac12H_{q-1} \ge \tfrac12 H_{P_t} \ge 2D_t$.
+
+\emph{Case $t\le 9$.} $N(x)$ is nondecreasing in $x$. For each $t\le9$ we choose a threshold $y_t$ with $y_t\le q$: for $t \le 3$ we use $y_t = 74 \le q$; for $4\le t\le9$ the value $y_t$ given in Table~\ref{tab:thresholds} satisfies $y_t\le P_t+1\le q$. In every case $N(q)\ge N(y_t)\ge 2D_t$, where the last inequality is an explicit comparison of two finite products of rational numbers, recorded in Table~\ref{tab:thresholds} and checked exactly in the formal proof.
+\end{proof}
+
+\begin{table}[ht]
+\centering\small
+\begin{tabular}{rrrrrr}
+\toprule
+$t$ & $p_t$ & $P_t$ & $y_t$ & $N(y_t)$ & $2D_t$\\
+\midrule
+0 & -- & 1 & 74 & 4.83440 & 2.00000\\
+1 & 2 & 2 & 74 & 4.83440 & 3.00000\\
+2 & 3 & 6 & 74 & 4.83440 & 4.00000\\
+3 & 5 & 30 & 74 & 4.83440 & 4.80000\\
+4 & 7 & 210 & 150 & 5.50182 & 5.48571\\
+5 & 11 & 2\,310 & 234 & 5.98744 & 5.98442\\
+6 & 13 & 30\,030 & 368 & 6.44929 & 6.44476\\
+7 & 17 & 510\,510 & 522 & 6.82594 & 6.82386\\
+8 & 19 & 9\,699\,690 & 734 & 7.18488 & 7.18301\\
+9 & 23 & 223\,092\,870 & 992 & 7.50192 & 7.49531\\
+\bottomrule
+\end{tabular}
+\caption{Thresholds used for $t\le9$ in Proposition~\ref{prop:Nq} (values rounded to five decimals; the comparisons $N(y_t)\ge 2D_t$ are verified in exact arithmetic).}\label{tab:thresholds}
+\end{table}
+
+\begin{theorem}\label{thm:large}
+Let $n\ge1$ with $A(n)<q(n)$ and $q(n)>73$. Then $\usig(n)\ge 2n$.
+\end{theorem}
+
+\begin{proof}
+Let $q=q(n)$, let $T$ be as in Lemma~\ref{lem:structure}, and let $t=|T|$. By Lemma~\ref{lem:structure}(ii), $T\subseteq\mathcal{P}(q)$ and $\prod_{p\in T}p<q$, so Lemma~\ref{lem:rearr}(b) gives $P_t<q$. Proposition~\ref{prop:Nq} then gives $N(q)\ge 2D_t$, and Lemma~\ref{lem:rearr}(a) gives
+\[
+  \prod_{\substack{p<q\\p\notin T}}\Bigl(1+\frac1p\Bigr) = \frac{N(q)}{\prod_{p\in T}(1+1/p)} \ge \frac{N(q)}{D_t} \ge 2 .
+\]
+By Lemma~\ref{lem:usig-lower}, $\usig(n)\ge 2n$.
+\end{proof}
+
+\section{Proof of the main theorem and the equality cases}\label{sec:main}
+
+\begin{proof}[Proof of Theorem~\ref{thm:main}]
+Let $n\ge1$ with $A(n)<q(n)$. If $q(n)>73$, Theorem~\ref{thm:large} gives $\usig(n)+\ssq(n) > \usig(n) \ge 2n$. If $q(n)\le 73$, Proposition~\ref{prop:small} shows that \eqref{eq:G} holds for the pair $(q(n),A(n))$, and Lemma~\ref{lem:reduction} gives $\usig(n)+\ssq(n)\ge 2n$.
+\end{proof}
+
+\begin{corollary}\label{cor:equality}
+Let $n\ge1$ with $A(n)<q(n)$. Then $\usig(n)+\ssq(n)=2n$ if and only if $n\in\{1,4,24\}$.
+\end{corollary}
+
+\begin{proof}
+If $q(n)>73$, the inequality is strict (see the proof above). If $q(n)\le73$, the proof of Lemma~\ref{lem:reduction} gives
+\[
+  \usig(n)+\ssq(n) = G(q,a)\prod_{p\in S_1}(1+p) \ge 2aP(q)\prod_{p\in S_1}(1+p) \ge 2aP(q)\,s = 2n .
+\]
+Equality forces $S_1=\varnothing$ (so $s=1$) and $G(q,a)=2aP(q)$. By Proposition~\ref{prop:small} this means $(q,a)\in\{(2,1),(3,2),(5,4)\}$, that is, $n = aP(q)\in\{1,4,24\}$. Conversely, $\usig(1)+\ssq(1)=2$, $\usig(4)+\ssq(4)=8$, and $\usig(24)+\ssq(24)=36+12=48$.
+\end{proof}
+
+\begin{remark}
+Corollary~\ref{cor:equality} uses the equalities of Lemma~\ref{lem:products} and the equality cases of Proposition~\ref{prop:small}. It was not part of the formalization, which covers Theorem~\ref{thm:main} only.
+\end{remark}
+
+\section{Formal verification}\label{sec:lean}
+
+Theorem~\ref{thm:main} (but not Corollary~\ref{cor:equality}) has been formalized in Lean~4 (version \texttt{4.36.0-rc2}) with the Mathlib library (commit \texttt{9d581dfff2e41de989072ea63abf3daf69311520}), in a single file \texttt{A401714.lean} of about $870$ lines, which can be checked inside any Lean project depending on that version of Mathlib by running
+\[\texttt{lake env lean A401714.lean}.\] The final statement is:
+
+\begin{lstlisting}
+def usigma (n : ℕ) : ℕ := ∑ d ∈ n.divisors.filter (fun d => Nat.Coprime d (n / d)), d
+def ssq (n : ℕ) : ℕ := ∑ d ∈ n.divisors.filter (fun d => Squarefree d), d
+def rad (n : ℕ) : ℕ := ∏ p ∈ n.primeFactors, p
+noncomputable def A003557 (n : ℕ) : ℕ := n / rad n
+noncomputable def A053669 (n : ℕ) : ℕ :=
+  if hn : 0 < n then Nat.find (exists_prime_not_dvd n hn) else 2
+
+theorem A401714_le_A401715 (n : ℕ) (hn : 0 < n) (h : A003557 n < A053669 n) :
+    2 * n ≤ usigma n + ssq n
+\end{lstlisting}
+
+\noindent Here \texttt{Nat.find} returns the least natural number with the stated property, so \texttt{A053669 n} is the smallest prime not dividing $n$; a lemma in the accompanying checks proves this characterization explicitly. The following points were verified.
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{No gaps.} The file compiles without errors and contains no \texttt{sorry}. The command \texttt{\#print axioms A401714.A401714\_le\_A401715} reports only the three standard axioms \texttt{propext}, \texttt{Classical.choice} and \texttt{Quot.sound}. In particular \texttt{native\_decide} is not used: the finite computations of Proposition~\ref{prop:small} and Table~\ref{tab:thresholds} are checked by the Lean kernel through \texttt{decide} and \texttt{norm\_num}.
+  \item \textbf{Fidelity of the statement.} The Lean definitions were evaluated and compared with the OEIS data: \texttt{usigma} reproduces \oeis{A034448} ($70$ terms), \texttt{ssq} reproduces \oeis{A048250} ($73$ terms), \texttt{n / rad n} reproduces \oeis{A003557} ($98$ terms), the smallest prime not dividing $n$ reproduces \oeis{A053669} ($105$ terms), and the indicator functions of the hypothesis and of the conclusion reproduce \oeis{A401714} and \oeis{A401715} ($105$ terms each).
+  \item \textbf{Non-vacuity.} The hypotheses of the theorem are shown, inside Lean, to be satisfiable (for example $n=24$, $q=5$).
+  \item \textbf{Independent re-check.} The file was compiled a second time, independently, from an unmodified copy with SHA-256 checksum
+  \begin{center}\footnotesize\texttt{1a5db0e926d289257a65a430d5b7d4f18e8f2f8b922f484d18ca46b3c3200d03}.\end{center}
+  The published file \texttt{A401714.lean} differs from that copy only in an attribution comment on line~6 (no Lean code is affected); its SHA-256 checksum is
+  \begin{center}\footnotesize\texttt{057a6b428221249d2e7b49048b477d7d2fe1720c5a92c47947cc69a69e3b2649}.\end{center}
+\end{enumerate}
+The formal structure follows the paper: the product lower bounds of Lemma~\ref{lem:products}; the reduction of Lemma~\ref{lem:reduction}; the kernel-checked finite verification for $q\le73$; Lemmas~\ref{lem:rearr}--\ref{lem:star}; and Proposition~\ref{prop:Nq} and Theorem~\ref{thm:large}.
+
+\section*{Acknowledgements and disclosure}
+
+The proof was found and formalized with substantial assistance from two AI systems: Claude (Anthropic), which proposed the overall strategy, the bound of Lemma~\ref{lem:harmonic} and the Lean formalization, and ChatGPT (OpenAI), which contributed the reduction of Lemma~\ref{lem:reduction}, the rearrangement bound of Lemma~\ref{lem:rearr}, a log-free form of the induction in Lemma~\ref{lem:star}, exact recomputation of the numerical margins, and an independent audit of the final formal proof. The author, writing under the pseudonym A-guy-with-AI, is responsible for the statement and its presentation. The conjecture is due to Antti Karttunen. The Lean source files, the paper's source, and the computation scripts are available at \url{https://github.com/A-guy-with-AI/A401714-proof}.
+
+\begin{thebibliography}{9}
+\bibitem{A401714} A.~Karttunen, Sequence \oeis{A401714}, \emph{The On-Line Encyclopedia of Integer Sequences}, \url{https://oeis.org/A401714} (accessed November 9, 2026).
+\bibitem{A401715} A.~Karttunen, Sequence \oeis{A401715}, \emph{The On-Line Encyclopedia of Integer Sequences}, \url{https://oeis.org/A401715} (accessed November 9, 2026).
+\bibitem{A388986} A.~Karttunen, Sequence \oeis{A388986}, \emph{The On-Line Encyclopedia of Integer Sequences}, \url{https://oeis.org/A388986} (accessed November 9, 2026).
+\bibitem{mathlib} The Mathlib Community, \emph{The Lean mathematical library}, Proceedings of the 9th ACM SIGPLAN International Conference on Certified Programs and Proofs (CPP 2020), 367--381.
+\bibitem{lean4} L.~de Moura and S.~Ullrich, \emph{The Lean 4 theorem prover and programming language}, Automated Deduction -- CADE 28, Lecture Notes in Computer Science 12699, Springer, 2021, 625--635.
+\end{thebibliography}
+
+\end{document}
